@@ -1,0 +1,14 @@
+*.vs
+.vscode
+*.dcu
+*.identcache
+*.dproj.local
+*.vbw
+*.class
+*.apk
+output.json
+bin/
+Bin/
+Debug/
+release/
+backup/
