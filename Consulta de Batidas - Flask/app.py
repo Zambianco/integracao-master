@@ -2680,7 +2680,11 @@ def create_app() -> Flask:
         final_date = (payload.get("final_date") or "").strip()
         initial_nsr = str(payload.get("initial_nsr") or "").strip()
         final_nsr = str(payload.get("final_nsr") or "").strip()
+        pis = str(payload.get("pis") or "").strip()
         query_mode = (payload.get("query_mode") or "date").strip().lower()
+
+        if pis and not pis.isdigit():
+            return jsonify({"error": "Informe apenas numeros no PIS."}), 400
 
         if not controlid_config["configured"]:
             return jsonify(
@@ -2868,7 +2872,15 @@ def create_app() -> Flask:
                     if str(record.get("nsr") or "") in live_nsrs:
                         record["source"] = "live"
 
-            filtered_records = [record for record in records if record.get("classe") == "batida_ponto"]
+            filtered_records = [
+                record for record in records
+                if record.get("classe") == "batida_ponto"
+                and (
+                    not pis
+                    or str(record.get("pis") or "").strip().startswith(pis)
+                    or str(record.get("pis") or "").strip().endswith(pis)
+                )
+            ]
             summary = summarize_records(records)
             cache_meta["sync_state"] = build_sync_state(
                 data_source=cache_meta["data_source"],

@@ -263,6 +263,10 @@
                         <label for="finalNsr" class="form-label small fw-medium">NSR Final <span class="text-muted fw-normal">(Opcional)</span></label>
                         <input id="finalNsr" type="number" min="1" step="1" class="form-control" placeholder="Teto da busca">
                     </div>
+                    <div class="col-md-3">
+                        <label for="pis" class="form-label small fw-medium">PIS do funcionario <span class="text-muted fw-normal">(Inicio ou final)</span></label>
+                        <input id="pis" type="text" inputmode="numeric" pattern="[0-9]*" class="form-control" placeholder="Somente numeros">
+                    </div>
                 </div>
 
                 <div class="d-flex gap-2 align-items-center">
@@ -273,6 +277,9 @@
                     </button>
                     <button id="clearButton" type="button" class="btn btn-outline-secondary px-4 d-flex align-items-center gap-2">
                         <i class="bi bi-eraser"></i> Limpar
+                    </button>
+                    <button id="exportButton" type="button" class="btn btn-outline-success px-4 d-flex align-items-center gap-2" disabled>
+                        <i class="bi bi-download"></i> Exportar CSV
                     </button>
                 </div>
             </form>
@@ -350,6 +357,8 @@
         const btnSpinner = document.getElementById("btnSpinner");
         const btnText = document.getElementById("btnText");
         const clearButton = document.getElementById("clearButton");
+        const exportButton = document.getElementById("exportButton");
+        const pis = document.getElementById("pis");
         const tableStatus = document.getElementById("tableStatus");
         const initialDate = document.getElementById("initialDate");
         const finalDate = document.getElementById("finalDate");
@@ -427,6 +436,7 @@
 
         function renderRows(records) {
             lastRenderedFilteredRecords = records;
+            exportButton.disabled = !records.length;
             if (!records.length) {
                 resultsBody.innerHTML = getEmptyStateHtml("Nenhum registro encontrado para o filtro informado.");
                 return;
@@ -676,7 +686,8 @@
                         initial_date: toBrazilianDate(initialDate.value),
                         final_date: toBrazilianDate(finalDate.value),
                         initial_nsr: initialNsr.value,
-                        final_nsr: finalNsr.value
+                        final_nsr: finalNsr.value,
+                        pis: pis.value.trim()
                     })
                 });
 
@@ -712,6 +723,9 @@
             setTodayDefaults();
             initialNsr.value = "";
             finalNsr.value = "";
+            pis.value = "";
+            lastRenderedFilteredRecords = [];
+            exportButton.disabled = true;
             queryMode.value = "date";
             syncQueryMode();
             totalRegistros.textContent = "0";
@@ -723,6 +737,31 @@
             nsrAudit.classList.add("d-none");
             nsrAudit.innerHTML = "";
             hideFeedback();
+        });
+
+        exportButton.addEventListener("click", () => {
+            const groups = new Map();
+            for (const record of lastRenderedFilteredRecords) {
+                const key = `${record.data}|${record.pis || ""}`;
+                if (!groups.has(key)) groups.set(key, { date: record.data, pis: record.pis || "", times: [] });
+                groups.get(key).times.push(record.hora || "");
+            }
+            const includePis = new Set([...groups.values()].map((group) => group.pis)).size > 1;
+            const lines = [...groups.values()]
+                .sort((a, b) => {
+                    const dateA = a.date.split("/").reverse().join("");
+                    const dateB = b.date.split("/").reverse().join("");
+                    return dateA.localeCompare(dateB) || a.pis.localeCompare(b.pis);
+                })
+                .map(({ date, pis: employeePis, times }) =>
+                    [date, ...(includePis ? [employeePis] : []), ...times.sort()].join(";"));
+            const blob = new Blob(["\uFEFF", lines.join("\r\n"), "\r\n"], { type: "text/csv;charset=utf-8" });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = `batidas_${new Date().toISOString().slice(0, 10)}.csv`;
+            link.click();
+            URL.revokeObjectURL(url);
         });
 
         setTodayDefaults();
