@@ -112,6 +112,28 @@ class ControlIDClient:
         response.raise_for_status()
         return response.text
 
+    def load_users(self, page_size: int = 100) -> list[dict]:
+        if not self.session_key:
+            raise RuntimeError("Nao autenticado")
+
+        users: list[dict] = []
+        offset = 0
+        while True:
+            response = self.session.post(
+                f"{self.base_url}/load_users.fcgi?session={self.session_key}",
+                json={"limit": page_size, "offset": offset},
+                headers={"Content-Type": "application/json; charset=utf-8"},
+                verify=False,
+                timeout=30,
+            )
+            response.raise_for_status()
+            data = response.json()
+            batch = data.get("users") or []
+            users.extend(batch)
+            offset += len(batch)
+            if not batch or offset >= int(data.get("count") or 0):
+                return users
+
     @staticmethod
     def _raise_http_error_with_details(response: Response) -> None:
         try:
@@ -454,6 +476,16 @@ class AFDRepository:
 
                 CREATE INDEX IF NOT EXISTS idx_afd_conflicts_device_nsr
                 ON afd_record_conflicts(device_id, nsr);
+
+                CREATE TABLE IF NOT EXISTS device_users (
+                    device_id INTEGER NOT NULL,
+                    pis TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    registration TEXT,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY(device_id, pis),
+                    FOREIGN KEY(device_id) REFERENCES devices(id)
+                );
                 """
             )
 
@@ -1402,6 +1434,37 @@ class AFDRepository:
             )
             connection.commit()
 
+    def save_device_users(self, device_id: int, users: list[dict]) -> int:
+        rows = []
+        for user in users:
+            pis_digits = "".join(ch for ch in str(user.get("pis") or "") if ch.isdigit())
+            name = str(user.get("name") or "").strip()
+            if not pis_digits or not name or int(pis_digits) == 0:
+                continue
+            rows.append((device_id, pis_digits.zfill(12), name, str(user.get("registration") or "")))
+
+        with self._connect() as connection:
+            connection.executemany(
+                """
+                INSERT INTO device_users (device_id, pis, name, registration, updated_at)
+                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(device_id, pis) DO UPDATE SET
+                    name = excluded.name,
+                    registration = excluded.registration,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                rows,
+            )
+        return len(rows)
+
+    def get_device_user_names(self, device_id: int) -> dict[str, str]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT pis, name FROM device_users WHERE device_id = ?",
+                (device_id,),
+            ).fetchall()
+        return {str(row["pis"]): str(row["name"]) for row in rows}
+
     def get_max_nsr(self, device_id: int) -> int | None:
         with self._connect() as connection:
             row = connection.execute(
@@ -2297,6 +2360,210 @@ def determine_sync_window_for_dates(
     return sync_initial, sync_final, statuses
 
 
+def sync_date_window_from_device(
+    repository: AFDRepository,
+    device_id: int,
+    base_url: str,
+    username: str,
+    password: str,
+    sync_initial_date: str,
+    sync_final_date: str,
+) -> tuple[str, list[dict], dict]:
+    client = ControlIDClient(base_url=base_url, username=username, password=password)
+    client.login()
+    raw_text = client.get_afd(initial_date=sync_initial_date, final_date=sync_final_date)
+    live_records = parse_afd_text(raw_text, source="live")
+    repository.update_device_capabilities(device_id=device_id, supports_date_query=1)
+    repository.mark_device_sync_success(device_id)
+
+    afd_import_id = repository.create_import(
+        device_id=device_id,
+        query_mode="date",
+        source_type="api_get_afd",
+        raw_afd=raw_text,
+        requested_initial_date=sync_initial_date,
+        requested_final_date=sync_final_date,
+    )
+    repository.finalize_import(afd_import_id, live_records)
+    import_stats = repository.save_records(device_id=device_id, afd_import_id=afd_import_id, records=live_records)
+    return raw_text, live_records, import_stats
+
+
+MIN_INTRAJORNADA_MINUTES = 60
+ROSTER_LOOKBACK_DAYS = 30
+MAX_PANEL_PERIOD_DAYS = 62
+
+
+def _minutes_from_hhmm(value: str) -> int | None:
+    try:
+        hours, minutes = str(value or "").split(":")[:2]
+        return int(hours) * 60 + int(minutes)
+    except ValueError:
+        return None
+
+
+def build_employee_roster(repository: AFDRepository, device_id: int, target_iso_date: str) -> dict[str, dict]:
+    """Employees considered active on the target day.
+
+    Sources: AFD type 5 (cadastro I/A/E) up to the end of the target day, plus
+    anyone who punched in the lookback window. An employee whose latest type 5
+    operation is an exclusion (E) issued after their last punch is dropped.
+    """
+    lookback_start = (
+        datetime.strptime(target_iso_date, "%Y-%m-%d") - timedelta(days=ROSTER_LOOKBACK_DAYS)
+    ).strftime("%Y-%m-%d")
+
+    with repository._connect() as connection:
+        registrations = connection.execute(
+            """
+            SELECT nsr, employee_identifier, operation_type, parsed_json
+            FROM afd_records
+            WHERE device_id = ?
+              AND record_type = '5'
+              AND substr(event_timestamp, 1, 10) <= ?
+            ORDER BY nsr ASC
+            """,
+            (device_id, target_iso_date),
+        ).fetchall()
+        recent_punches = connection.execute(
+            """
+            SELECT employee_identifier, MAX(nsr) AS last_nsr
+            FROM afd_records
+            WHERE device_id = ?
+              AND record_type = '3'
+              AND substr(event_timestamp, 1, 10) BETWEEN ? AND ?
+            GROUP BY employee_identifier
+            """,
+            (device_id, lookback_start, target_iso_date),
+        ).fetchall()
+
+    employees: dict[str, dict] = {}
+    for row in registrations:
+        pis = str(row["employee_identifier"] or "").strip()
+        if not pis:
+            continue
+        try:
+            parsed = json.loads(row["parsed_json"] or "{}")
+        except ValueError:
+            parsed = {}
+        entry = employees.setdefault(pis, {"pis": pis, "nome": "", "last_op": "", "last_op_nsr": 0, "last_punch_nsr": 0})
+        entry["last_op"] = str(row["operation_type"] or "").strip().upper()
+        entry["last_op_nsr"] = int(row["nsr"])
+        if parsed.get("name"):
+            entry["nome"] = str(parsed["name"]).strip()
+
+    for row in recent_punches:
+        pis = str(row["employee_identifier"] or "").strip()
+        if not pis:
+            continue
+        entry = employees.setdefault(pis, {"pis": pis, "nome": "", "last_op": "", "last_op_nsr": 0, "last_punch_nsr": 0})
+        entry["last_punch_nsr"] = int(row["last_nsr"] or 0)
+
+    # The device's user list carries the correctly encoded current name; the AFD
+    # type 5 name is only a fallback (it may be missing or mis-encoded).
+    device_names = repository.get_device_user_names(device_id)
+
+    active = {}
+    for pis, entry in employees.items():
+        excluded = entry["last_op"] == "E" and entry["last_op_nsr"] > entry["last_punch_nsr"]
+        if not excluded:
+            entry["nome"] = device_names.get(pis) or entry["nome"]
+            active[pis] = entry
+    return active
+
+
+def analyze_employee_day(punch_times: list[str]) -> dict:
+    # The AFD has minute resolution, so two punches in the same minute are a
+    # double tap on the device, not an extra entry/exit.
+    all_times = sorted(punch_times)
+    times = sorted(set(all_times))
+    issues = []
+    interval_minutes = None
+
+    if not times:
+        issues.append("sem_batidas")
+    else:
+        if len(times) % 2 == 1:
+            issues.append("impar")
+        if len(times) >= 4:
+            second = _minutes_from_hhmm(times[1])
+            third = _minutes_from_hhmm(times[2])
+            if second is not None and third is not None:
+                interval_minutes = third - second
+                if interval_minutes < MIN_INTRAJORNADA_MINUTES:
+                    issues.append("intervalo_curto")
+
+    return {
+        "batidas": times,
+        "total_batidas": len(times),
+        "batidas_duplicadas": len(all_times) - len(times),
+        "intervalo_minutos": interval_minutes,
+        "ocorrencias": issues,
+    }
+
+
+def build_daily_compliance(repository: AFDRepository, device_id: int, target_date: str) -> dict:
+    target_iso = datetime.strptime(target_date, "%d/%m/%Y").strftime("%Y-%m-%d")
+    roster = build_employee_roster(repository, device_id, target_iso)
+    records = repository.get_records_between_dates(device_id, target_date, target_date)
+
+    punches_by_pis: dict[str, list[str]] = {}
+    for record in records:
+        if record.get("classe") != "batida_ponto":
+            continue
+        pis = str(record.get("pis") or "").strip()
+        if pis:
+            punches_by_pis.setdefault(pis, []).append(str(record.get("hora") or ""))
+
+    all_pis = set(roster) | set(punches_by_pis)
+    employees = []
+    for pis in all_pis:
+        analysis = analyze_employee_day(punches_by_pis.get(pis, []))
+        employees.append(
+            {
+                "pis": pis,
+                "nome": roster.get(pis, {}).get("nome", ""),
+                "data": target_date,
+                "data_iso": target_iso,
+                **analysis,
+            }
+        )
+
+    employees.sort(key=lambda item: ((item["nome"] or "~").lower(), item["pis"]))
+    return {"date": target_date, "employees": employees, "counts": count_occurrences(employees)}
+
+
+def build_period_compliance(repository: AFDRepository, device_id: int, initial_date: str, final_date: str) -> dict:
+    rows = []
+    names: dict[str, str] = {}
+    for day in iterate_dates(initial_date, final_date):
+        day_result = build_daily_compliance(repository, device_id, day)
+        for row in day_result["employees"]:
+            if row["nome"]:
+                names[row["pis"]] = row["nome"]
+        rows.extend(day_result["employees"])
+
+    # Use the most recent known name for every row of the same employee.
+    for row in rows:
+        row["nome"] = names.get(row["pis"], row["nome"])
+
+    rows.sort(key=lambda item: ((item["nome"] or "~").lower(), item["pis"], item["data_iso"]))
+    counts = count_occurrences(rows)
+    counts["empregados_distintos"] = len({row["pis"] for row in rows})
+    counts["dias"] = len(iterate_dates(initial_date, final_date))
+    return {"initial_date": initial_date, "final_date": final_date, "employees": rows, "counts": counts}
+
+
+def count_occurrences(employees: list[dict]) -> dict:
+    return {
+        "empregados": len(employees),
+        "sem_batidas": sum(1 for item in employees if "sem_batidas" in item["ocorrencias"]),
+        "impar": sum(1 for item in employees if "impar" in item["ocorrencias"]),
+        "intervalo_curto": sum(1 for item in employees if "intervalo_curto" in item["ocorrencias"]),
+        "ok": sum(1 for item in employees if not item["ocorrencias"]),
+    }
+
+
 def build_day_nsr_audit(repository: AFDRepository, device_id: int, initial_date: str, final_date: str) -> list[dict]:
     audit = []
     for target_date in iterate_dates(initial_date, final_date):
@@ -2668,6 +2935,89 @@ def create_app() -> Flask:
             repcid_available=RepCidClient.is_available(),
         )
 
+    @app.get("/painel")
+    def painel():
+        return render_template("painel.html")
+
+    @app.get("/api/painel")
+    def painel_data():
+        today = datetime.now().date()
+        yesterday = today - timedelta(days=1)
+        single_date = (request.args.get("date") or "").strip()
+        requested_start = (request.args.get("start") or single_date).strip()
+        requested_end = (request.args.get("end") or requested_start).strip()
+
+        try:
+            start_day = datetime.strptime(requested_start, "%Y-%m-%d").date() if requested_start else yesterday
+            end_day = datetime.strptime(requested_end, "%Y-%m-%d").date() if requested_end else start_day
+        except ValueError:
+            return jsonify({"error": "Use o formato de data aaaa-mm-dd."}), 400
+
+        if start_day >= today or end_day >= today:
+            return jsonify({"error": "A analise so pode ser feita para dias anteriores a hoje."}), 400
+        if end_day < start_day:
+            return jsonify({"error": "A data final deve ser igual ou posterior a data inicial."}), 400
+        if (end_day - start_day).days + 1 > MAX_PANEL_PERIOD_DAYS:
+            return jsonify({"error": f"O periodo maximo e de {MAX_PANEL_PERIOD_DAYS} dias."}), 400
+
+        initial_date = start_day.strftime("%d/%m/%Y")
+        final_date = end_day.strftime("%d/%m/%Y")
+        controlid_config = get_controlid_config()
+        sync_info = {"equipment_consulted": False, "warning": None}
+
+        try:
+            repository = AFDRepository(app.config["AFD_DB_PATH"])
+            device_id = repository.get_or_create_device(base_url=controlid_config["base_url"])
+
+            if controlid_config["configured"]:
+                try:
+                    users_client = ControlIDClient(
+                        base_url=controlid_config["base_url"],
+                        username=controlid_config["username"],
+                        password=controlid_config["password"],
+                    )
+                    users_client.login()
+                    repository.save_device_users(device_id, users_client.load_users())
+                except (requests.RequestException, ValueError) as exc:
+                    sync_info["warning"] = f"Nao foi possivel atualizar os nomes no relogio; usando nomes salvos: {exc}"
+
+                sync_initial, sync_final, _ = determine_sync_window_for_dates(
+                    repository=repository,
+                    device_id=device_id,
+                    initial_date=initial_date,
+                    final_date=final_date,
+                )
+                if sync_initial and sync_final:
+                    # Never pull past yesterday: the current day is still open.
+                    if datetime.strptime(sync_final, "%d/%m/%Y").date() >= today:
+                        sync_final = yesterday.strftime("%d/%m/%Y")
+                    try:
+                        sync_date_window_from_device(
+                            repository=repository,
+                            device_id=device_id,
+                            base_url=controlid_config["base_url"],
+                            username=controlid_config["username"],
+                            password=controlid_config["password"],
+                            sync_initial_date=sync_initial,
+                            sync_final_date=sync_final,
+                        )
+                        sync_info["equipment_consulted"] = True
+                    except requests.RequestException as exc:
+                        sync_info["warning"] = f"Relogio indisponivel, usando dados locais: {exc}"
+            else:
+                sync_info["warning"] = "Equipamento nao configurado; usando apenas dados locais."
+
+            result = build_period_compliance(repository, device_id, initial_date, final_date)
+        except Exception as exc:
+            return jsonify({"error": f"Erro ao montar painel: {exc}"}), 500
+
+        result["start_iso"] = start_day.isoformat()
+        result["end_iso"] = end_day.isoformat()
+        result["sync"] = sync_info
+        result["min_intervalo_minutos"] = MIN_INTRAJORNADA_MINUTES
+        result["max_date"] = yesterday.strftime("%Y-%m-%d")
+        return jsonify(result)
+
     @app.post("/api/afd")
     def afd():
         payload = request.get_json(silent=True) or {}
@@ -2819,29 +3169,21 @@ def create_app() -> Flask:
                     cache_meta["synced_initial_date"] = sync_initial_date
                     cache_meta["synced_final_date"] = sync_final_date
 
-                    client = ControlIDClient(base_url=base_url, username=username, password=password)
-                    client.login()
-                    raw_text = client.get_afd(initial_date=sync_initial_date, final_date=sync_final_date)
-                    live_records = parse_afd_text(raw_text, source="live")
+                    raw_text, live_records, import_stats = sync_date_window_from_device(
+                        repository=repository,
+                        device_id=device_id,
+                        base_url=base_url,
+                        username=username,
+                        password=password,
+                        sync_initial_date=sync_initial_date,
+                        sync_final_date=sync_final_date,
+                    )
                     cache_meta["live_records"] = len(live_records)
                     cache_meta["source_type"] = "api_get_afd"
                     cache_meta["data_source"] = "cache_after_sync"
                     cache_meta["sync_attempted"] = True
                     cache_meta["equipment_consulted"] = True
                     cache_meta["sync_strategy"] = "date_window"
-                    repository.update_device_capabilities(device_id=device_id, supports_date_query=1)
-                    repository.mark_device_sync_success(device_id)
-
-                    afd_import_id = repository.create_import(
-                        device_id=device_id,
-                        query_mode="date",
-                        source_type="api_get_afd",
-                        raw_afd=raw_text,
-                        requested_initial_date=sync_initial_date,
-                        requested_final_date=sync_final_date,
-                    )
-                    repository.finalize_import(afd_import_id, live_records)
-                    import_stats = repository.save_records(device_id=device_id, afd_import_id=afd_import_id, records=live_records)
                 else:
                     cache_meta["source_type"] = "db_only"
                     cache_meta["data_source"] = "cache"

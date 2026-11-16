@@ -1,0 +1,944 @@
+.print-only {
+    display: none;
+}
+
+.print-pages-output {
+    display: none;
+}
+
+body.print-pagination-measure .print-pages-output {
+    display: block !important;
+    position: absolute;
+    left: -100000px;
+    top: 0;
+    width: calc(210mm - 24mm);
+    visibility: hidden;
+}
+
+body.print-pagination-measure .print-only {
+    display: block !important;
+}
+
+body.print-pagination-measure .print-page,
+body.print-pagination-measure .print-sheet.print-page {
+    height: calc(297mm - 24mm);
+    min-height: calc(297mm - 24mm);
+    max-height: calc(297mm - 24mm);
+    box-sizing: border-box;
+    display: grid !important;
+    grid-template-rows: max-content minmax(0, 1fr) max-content;
+    overflow: hidden;
+}
+
+body.print-pagination-measure .print-page .print-page-body {
+    min-height: 0;
+    overflow: hidden;
+    position: relative;
+    z-index: 1;
+}
+
+body.print-pagination-measure .print-sheet.print-page .print-header,
+body.print-pagination-measure .print-sheet.print-page .print-footer {
+    position: relative;
+    z-index: 2;
+    background: #fff;
+    flex-shrink: 0;
+}
+
+body.print-pagination-measure .print-sheet.print-page .print-footer {
+    margin-top: 0 !important;
+}
+
+body.print-pagination-measure .print-sheet {
+    display: block;
+    width: 100%;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    color: #000;
+    background: #fff;
+    font-family: "Courier New", Courier, monospace;
+    font-size: 12px;
+    line-height: 1.25;
+}
+
+body.print-pagination-measure .print-sheet .print-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    border-bottom: 1px solid #000;
+    padding: 0 0 6px;
+    margin-bottom: 10px;
+}
+
+body.print-pagination-measure .print-sheet .print-title {
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 0.6px;
+    margin: 0;
+    text-transform: uppercase;
+}
+
+body.print-pagination-measure .print-sheet .print-subtitle {
+    margin: 2px 0 0;
+    color: #000;
+    font-size: 11px;
+    text-transform: uppercase;
+}
+
+body.print-pagination-measure .print-sheet .print-meta {
+    text-align: right;
+    font-size: 11px;
+    color: #000;
+    margin-left: 10px;
+}
+
+body.print-pagination-measure .print-sheet .print-section-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: #000;
+    margin: 12px 0 4px;
+    border-bottom: 1px solid #000;
+    background: transparent;
+    padding: 0 0 2px;
+    break-after: avoid;
+    page-break-after: avoid;
+}
+
+body.print-pagination-measure .print-sheet .print-section-title + .print-record-list,
+body.print-pagination-measure .print-sheet .print-section-title + .print-table {
+    break-before: avoid;
+    page-break-before: avoid;
+}
+
+/* O titulo da secao ja desenha a linha: a tabela logo abaixo nao repete a borda superior. */
+body.print-pagination-measure .print-sheet .print-section-title + .print-table,
+body.print-pagination-measure .print-sheet .print-section-title + .print-table > thead > tr:first-child > th {
+    border-top: 0 !important;
+}
+
+/* Separador pontilhado entre colunas (a agenda de producao ja tem divisorias proprias). */
+body.print-pagination-measure .print-sheet table.print-table:not(.agenda-print-table) > * > tr > th + th,
+body.print-pagination-measure .print-sheet table.print-table:not(.agenda-print-table) > * > tr > td + td {
+    border-left: 0.5px dotted #999 !important;
+}
+
+/* Quebra somente entre palavras; palavra que nao cabe na coluna e hifenizada em vez de invadir a vizinha. */
+body.print-pagination-measure .print-sheet table.print-table th,
+body.print-pagination-measure .print-sheet table.print-table td {
+    word-break: normal !important;
+    overflow-wrap: break-word !important;
+    hyphens: auto !important;
+}
+
+/* Linhas do corpo sem bordas entre si (so a ultima fecha a tabela) e com alternancia leve de cor. */
+body.print-pagination-measure .print-sheet table.print-table.print-table:not(.agenda-print-table) > tbody > tr:not(:last-child) > td {
+    border-top: 0 !important;
+    border-bottom: 0 !important;
+}
+
+body.print-pagination-measure .print-sheet table.print-table.print-table:not(.agenda-print-table) > tbody > tr:nth-child(even) > td {
+    background: #f0f0f0 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+}
+
+body.print-pagination-measure .print-sheet .print-section-wrapper {
+    break-inside: avoid;
+    page-break-inside: avoid;
+}
+
+body.print-pagination-measure .print-sheet .print-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px 14px;
+    border: 0;
+}
+
+body.print-pagination-measure .print-sheet .print-item {
+    border-bottom: 1px dotted #777;
+    border-radius: 0;
+    padding: 4px 0;
+    display: block;
+    break-inside: avoid;
+    page-break-inside: avoid;
+}
+
+body.print-pagination-measure .print-sheet .print-label {
+    display: block;
+    font-size: 10px;
+    text-transform: uppercase;
+    color: #000;
+    margin: 0;
+    letter-spacing: 0.4px;
+    padding: 0;
+    background: transparent;
+    font-weight: 700;
+}
+
+body.print-pagination-measure .print-sheet .print-value {
+    font-size: 12px;
+    font-weight: 400;
+    color: #000;
+    word-break: break-word;
+    white-space: pre-line;
+    padding: 1px 0 0;
+}
+
+body.print-pagination-measure .print-sheet .print-footer {
+    margin-top: auto;
+    padding-top: 6px;
+    border-top: 1px solid #000;
+    font-size: 11px;
+    color: #000;
+    display: flex;
+    justify-content: space-between;
+    flex-shrink: 0;
+}
+
+body.print-pagination-measure .print-sheet .print-tree {
+    margin-top: 4px;
+    border-top: 1px dotted #777;
+}
+
+body.print-pagination-measure .print-sheet .print-tree-item {
+    padding: 5px 0 5px calc(var(--tree-level, 0) * 14px);
+    border-bottom: 1px dotted #777;
+    break-inside: avoid;
+    page-break-inside: avoid;
+}
+
+body.print-pagination-measure .print-sheet .print-tree-line {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+}
+
+body.print-pagination-measure .print-sheet .print-tree-index {
+    font-weight: 700;
+    min-width: 32px;
+}
+
+body.print-pagination-measure .print-sheet .print-tree-name {
+    font-weight: 700;
+}
+
+body.print-pagination-measure .print-sheet .print-tree-meta {
+    margin-top: 2px;
+    font-size: 11px;
+    color: #111;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+body.print-pagination-measure .print-sheet .print-meta-field {
+    display: inline-grid;
+    grid-template-columns: 56px auto;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+
+body.print-pagination-measure .print-sheet .print-meta-label {
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    color: #333;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    line-height: 1.2;
+    white-space: nowrap;
+    text-align: right;
+}
+
+body.print-pagination-measure .print-sheet .print-meta-value {
+    font-weight: 400;
+    letter-spacing: 0.1px;
+    color: #111;
+}
+
+body.print-pagination-measure .print-sheet .print-record-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+body.print-pagination-measure .print-sheet .print-record-card {
+    border: 1px solid #000;
+    break-inside: avoid;
+    page-break-inside: avoid;
+}
+
+body.print-pagination-measure .print-sheet .print-record-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    padding: 4px 6px;
+    border-bottom: 1px solid #000;
+}
+
+body.print-pagination-measure .print-sheet .print-record-id {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+body.print-pagination-measure .print-sheet .print-record-plan {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+body.print-pagination-measure .print-sheet .print-record-title {
+    padding: 4px 6px;
+    font-size: 12px;
+    font-weight: 700;
+    border-bottom: 1px dotted #777;
+}
+
+body.print-pagination-measure .print-sheet .print-record-meta-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px 10px;
+    padding: 4px 6px;
+}
+
+body.print-pagination-measure .print-sheet .print-record-section {
+    padding: 0 6px 4px;
+}
+
+body.print-pagination-measure .print-sheet .print-record-section-title {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin: 2px 0 3px;
+}
+
+body.print-pagination-measure .print-sheet .print-record-pair-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px 10px;
+}
+
+body.print-pagination-measure .print-sheet .print-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    table-layout: fixed;
+    font-size: 11px;
+}
+
+body.print-pagination-measure .print-sheet .print-table th,
+body.print-pagination-measure .print-sheet .print-table td {
+    border-top: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-right: 0;
+    padding: 3px 4px;
+    vertical-align: top;
+    word-break: break-word;
+    text-align: left;
+}
+
+body.print-pagination-measure .print-sheet .print-table thead th {
+    border-top: 1px solid #000;
+    border-bottom: 1px solid #000;
+}
+
+body.print-pagination-measure .print-sheet .print-record-list-head,
+body.print-pagination-measure .print-sheet .print-table thead {
+    display: table-header-group !important;
+    visibility: visible !important;
+    break-after: avoid;
+    page-break-after: avoid;
+}
+
+body.print-pagination-measure .print-sheet .print-record-list-head {
+    display: grid !important;
+}
+
+body.print-pagination-measure .print-sheet .print-table tbody td {
+    border-top: 1px dotted #777;
+    border-bottom: 1px dotted #777;
+}
+
+body.print-pagination-measure .print-sheet .print-table th {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    font-weight: 700;
+}
+
+body.print-pagination-measure .print-sheet .print-table tbody > tr,
+body.print-pagination-measure .print-sheet .print-table tbody > tr > td {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+}
+
+body.print-pagination-measure .print-sheet .print-manifest-table th:nth-child(1),
+body.print-pagination-measure .print-sheet .print-manifest-table td:nth-child(1) {
+    width: 5%;
+}
+
+body.print-pagination-measure .print-sheet .print-manifest-table th:nth-child(2),
+body.print-pagination-measure .print-sheet .print-manifest-table td:nth-child(2) {
+    width: 15%;
+}
+
+body.print-pagination-measure .print-sheet .print-manifest-table th:nth-child(3),
+body.print-pagination-measure .print-sheet .print-manifest-table td:nth-child(3) {
+    width: 45%;
+    white-space: pre-line;
+}
+
+body.print-pagination-measure .print-sheet .print-manifest-table th:nth-child(4),
+body.print-pagination-measure .print-sheet .print-manifest-table td:nth-child(4) {
+    width: 8%;
+}
+
+body.print-pagination-measure .print-sheet .print-manifest-table th:nth-child(5),
+body.print-pagination-measure .print-sheet .print-manifest-table td:nth-child(5) {
+    width: 8%;
+}
+
+body.print-pagination-measure .print-sheet .print-manifest-table th:nth-child(6),
+body.print-pagination-measure .print-sheet .print-manifest-table td:nth-child(6) {
+    width: 9%;
+}
+
+body.print-pagination-measure .print-sheet .print-manifest-table th:nth-child(7),
+body.print-pagination-measure .print-sheet .print-manifest-table td:nth-child(7) {
+    width: 10%;
+}
+
+body.print-pagination-measure .print-sheet .print-manifest-card {
+    padding: 6px;
+}
+
+body.print-pagination-measure .print-sheet .print-manifest-card-grid {
+    display: grid;
+    grid-template-columns: 28px 78px minmax(0, 1fr) 70px 48px 58px 78px;
+    gap: 8px;
+    align-items: start;
+}
+
+body.print-pagination-measure .print-sheet .print-manifest-cell {
+    min-width: 0;
+    text-align: left;
+}
+
+body.print-pagination-measure .print-sheet .print-manifest-card-labels {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    padding-bottom: 3px;
+    border-bottom: 1px solid #000;
+}
+
+body.print-pagination-measure .print-sheet .print-manifest-card-values {
+    padding-top: 4px;
+}
+
+body.print-pagination-measure .print-sheet .print-manifest-col-description {
+    white-space: normal;
+}
+
+body.print-pagination-measure .print-sheet .print-manifest-notes {
+    margin-top: 5px;
+    padding-top: 4px;
+    border-top: 1px dotted #777;
+}
+
+body.print-pagination-measure .print-sheet .print-manifest-notes .print-label {
+    display: inline;
+    margin-right: 4px;
+}
+
+body.print-pagination-measure .print-sheet .print-manifest-notes .print-value {
+    display: inline;
+    white-space: pre-line;
+}
+
+body.print-pagination-measure .print-sheet .full-width {
+    grid-column: 1 / -1;
+}
+
+@page {
+    size: A4 portrait;
+    margin: 12mm;
+}
+
+@media print {
+    html,
+    body {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    nav,
+    .offcanvas,
+    .toast-container,
+    .build-indicator,
+    .no-print {
+        display: none !important;
+    }
+
+    main.container {
+        max-width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    /* A visualização web deve ficar oculta durante a impressão, permanecendo somente o relatório no perfil padrão. */
+    .screen-only {
+        display: none !important;
+    }
+
+    .print-only {
+        display: block !important;
+    }
+
+    body.print-pagination-ready .js-print-report {
+        display: none !important;
+    }
+
+    body.print-pagination-ready .print-pages-output {
+        display: block !important;
+    }
+
+    .print-sheet {
+        display: block;
+        width: 100%;
+        border: 0;
+        border-radius: 0;
+        padding: 0;
+        color: #000;
+        background: #fff;
+        font-family: "Courier New", Courier, monospace;
+        font-size: 12px;
+        line-height: 1.25;
+    }
+
+    .print-sheet .print-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        border-bottom: 1px solid #000;
+        padding: 0 0 6px;
+        margin-bottom: 10px;
+    }
+
+    .print-sheet .print-title {
+        font-size: 16px;
+        font-weight: 700;
+        letter-spacing: 0.6px;
+        margin: 0;
+        text-transform: uppercase;
+    }
+
+    .print-sheet .print-subtitle {
+        margin: 2px 0 0;
+        color: #000;
+        font-size: 11px;
+        text-transform: uppercase;
+    }
+
+    .print-sheet .print-meta {
+        text-align: right;
+        font-size: 11px;
+        color: #000;
+        margin-left: 10px;
+    }
+
+    .print-sheet .print-section-title {
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+        color: #000;
+        margin: 12px 0 4px;
+        border-bottom: 1px solid #000;
+        background: transparent;
+        padding: 0 0 2px;
+        break-after: avoid;
+        page-break-after: avoid;
+    }
+
+    .print-sheet .print-section-title + .print-record-list,
+    .print-sheet .print-section-title + .print-table {
+        break-before: avoid;
+        page-break-before: avoid;
+    }
+
+    /* O titulo da secao ja desenha a linha: a tabela logo abaixo nao repete a borda superior. */
+    .print-sheet .print-section-title + .print-table,
+    .print-sheet .print-section-title + .print-table > thead > tr:first-child > th {
+        border-top: 0 !important;
+    }
+
+    /* Separador pontilhado entre colunas (a agenda de producao ja tem divisorias proprias). */
+    .print-sheet table.print-table:not(.agenda-print-table) > * > tr > th + th,
+    .print-sheet table.print-table:not(.agenda-print-table) > * > tr > td + td {
+        border-left: 0.5px dotted #999 !important;
+    }
+
+    /* Quebra somente entre palavras; palavra que nao cabe na coluna e hifenizada em vez de invadir a vizinha. */
+    .print-sheet table.print-table th,
+    .print-sheet table.print-table td {
+        word-break: normal !important;
+        overflow-wrap: break-word !important;
+        hyphens: auto !important;
+    }
+
+    /* Linhas do corpo sem bordas entre si (so a ultima fecha a tabela) e com alternancia leve de cor. */
+    .print-sheet table.print-table.print-table:not(.agenda-print-table) > tbody > tr:not(:last-child) > td {
+        border-top: 0 !important;
+        border-bottom: 0 !important;
+    }
+
+    .print-sheet table.print-table.print-table:not(.agenda-print-table) > tbody > tr:nth-child(even) > td {
+        background: #f0f0f0 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    .print-sheet .print-section-wrapper {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+
+    .print-sheet .print-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 4px 14px;
+        border: 0;
+    }
+
+    .print-sheet .print-item {
+        border-bottom: 1px dotted #777;
+        border-radius: 0;
+        padding: 4px 0;
+        display: block;
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+
+    .print-sheet .print-label {
+        display: block;
+        font-size: 10px;
+        text-transform: uppercase;
+        color: #000;
+        margin: 0;
+        letter-spacing: 0.4px;
+        padding: 0;
+        background: transparent;
+        font-weight: 700;
+    }
+
+    .print-sheet .print-value {
+        font-size: 12px;
+        font-weight: 400;
+        color: #000;
+        word-break: break-word;
+        white-space: pre-line;
+        padding: 1px 0 0;
+    }
+
+    .print-sheet .print-footer {
+        margin-top: auto;
+        padding-top: 6px;
+        border-top: 1px solid #000;
+        font-size: 11px;
+        color: #000;
+        display: flex;
+        justify-content: space-between;
+        flex-shrink: 0;
+    }
+
+    .print-sheet .full-width {
+        grid-column: 1 / -1;
+    }
+
+    .print-page {
+        height: calc(297mm - 24mm);
+        min-height: calc(297mm - 24mm);
+        max-height: calc(297mm - 24mm);
+        box-sizing: border-box;
+        display: grid !important;
+        grid-template-rows: max-content minmax(0, 1fr) max-content;
+        overflow: hidden;
+        break-after: page;
+        page-break-after: always;
+    }
+
+    .print-page:last-child {
+        break-after: auto;
+        page-break-after: auto;
+    }
+
+    .print-page .print-page-body {
+        min-height: 0;
+        overflow: hidden;
+        position: relative;
+        z-index: 1;
+    }
+
+    .print-sheet.print-page .print-header,
+    .print-sheet.print-page .print-footer {
+        position: relative;
+        z-index: 2;
+        background: #fff;
+        flex-shrink: 0;
+    }
+
+    .print-sheet.print-page .print-footer {
+        margin-top: 0 !important;
+    }
+
+    .print-sheet .print-page-counter {
+        font-weight: 700;
+    }
+
+    .print-sheet .print-footer-meta {
+        display: block;
+    }
+
+    .print-sheet .print-footer-state {
+        text-align: right;
+        white-space: nowrap;
+        font-weight: 700;
+    }
+
+    .print-sheet .print-tree {
+        margin-top: 4px;
+        border-top: 1px dotted #777;
+    }
+
+    .print-sheet .print-tree-item {
+        padding: 5px 0 5px calc(var(--tree-level, 0) * 14px);
+        border-bottom: 1px dotted #777;
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+
+    .print-sheet .print-tree-line {
+        display: flex;
+        gap: 8px;
+        align-items: baseline;
+    }
+
+    .print-sheet .print-tree-index {
+        font-weight: 700;
+        min-width: 32px;
+    }
+
+    .print-sheet .print-tree-name {
+        font-weight: 700;
+    }
+
+    .print-sheet .print-tree-meta {
+        margin-top: 2px;
+        font-size: 11px;
+        color: #111;
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .print-sheet .print-meta-field {
+        display: inline-grid;
+        grid-template-columns: 56px auto;
+        align-items: center;
+        gap: 6px;
+        white-space: nowrap;
+    }
+
+    .print-sheet .print-meta-label {
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        color: #333;
+        border: 0;
+        background: transparent;
+        padding: 0;
+        line-height: 1.2;
+        white-space: nowrap;
+        text-align: right;
+    }
+
+    .print-sheet .print-meta-value {
+        font-weight: 400;
+        letter-spacing: 0.1px;
+        color: #111;
+    }
+
+    .print-sheet .print-record-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .print-sheet .print-record-card {
+        border: 1px solid #000;
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+
+    .print-sheet .print-record-card-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 8px;
+        padding: 4px 6px;
+        border-bottom: 1px solid #000;
+    }
+
+    .print-sheet .print-record-id {
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+    }
+
+    .print-sheet .print-record-plan {
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+    }
+
+    .print-sheet .print-record-title {
+        padding: 4px 6px;
+        font-size: 12px;
+        font-weight: 700;
+        border-bottom: 1px dotted #777;
+    }
+
+    .print-sheet .print-record-meta-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 4px 10px;
+        padding: 4px 6px;
+    }
+
+    .print-sheet .print-record-section {
+        padding: 0 6px 4px;
+    }
+
+    .print-sheet .print-record-section-title {
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        margin: 2px 0 3px;
+    }
+
+    .print-sheet .print-record-pair-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 4px 10px;
+    }
+
+    .print-sheet .print-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        table-layout: fixed;
+        font-size: 11px;
+    }
+
+    .print-sheet .print-table th,
+    .print-sheet .print-table td {
+        border-top: 0;
+        border-bottom: 0;
+        border-left: 0;
+        border-right: 0;
+        padding: 3px 4px;
+        vertical-align: top;
+        word-break: break-word;
+        text-align: left;
+    }
+
+    .print-sheet .print-table thead th {
+        border-top: 1px solid #000;
+        border-bottom: 1px solid #000;
+    }
+
+    .print-sheet .print-record-list-head,
+    .print-sheet .print-table thead {
+        display: table-header-group !important;
+        visibility: visible !important;
+        break-after: avoid;
+        page-break-after: avoid;
+    }
+
+    .print-sheet .print-record-list-head {
+        display: grid !important;
+    }
+
+    .print-sheet .print-table tbody td {
+        border-top: 1px dotted #777;
+        border-bottom: 1px dotted #777;
+    }
+
+    .print-sheet .print-table th {
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        font-weight: 700;
+    }
+
+    .print-sheet .print-table tbody > tr,
+    .print-sheet .print-table tbody > tr > td {
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+    }
+
+    .print-sheet .print-manifest-table th:nth-child(1),
+    .print-sheet .print-manifest-table td:nth-child(1) {
+        width: 5%;
+    }
+
+    .print-sheet .print-manifest-table th:nth-child(2),
+    .print-sheet .print-manifest-table td:nth-child(2) {
+        width: 15%;
+    }
+
+    .print-sheet .print-manifest-table th:nth-child(3),
+    .print-sheet .print-manifest-table td:nth-child(3) {
+        width: 45%;
+        white-space: pre-line;
+    }
+
+    .print-sheet .print-manifest-table th:nth-child(4),
+    .print-sheet .print-manifest-table td:nth-child(4) {
+        width: 8%;
+    }
+
+    .print-sheet .print-manifest-table th:nth-child(5),
+    .print-sheet .print-manifest-table td:nth-child(5) {
+        width: 8%;
+    }
+
+    .print-sheet .print-manifest-table th:nth-child(6),
+    .print-sheet .print-manifest-table td:nth-child(6) {
+        width: 9%;
+    }
+
+    .print-sheet .print-manifest-table th:nth-child(7),
+    .print-sheet .print-manifest-table td:nth-child(7) {
+        width: 10%;
+    }
+}
+
+.print-force-page {
+    break-after: page;
+    page-break-after: always;
+}

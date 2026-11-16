@@ -1,0 +1,910 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Painel de Inconsistências</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <!-- Padrão de impressão copiado do PAP (static/css/print-standard.css). -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/print-standard.css') }}">
+    <style>
+        @media print {
+            body { background: #fff !important; }
+        }
+
+        .print-sheet .occ-print-table th:nth-child(1) { width: 20%; }
+        .print-sheet .occ-print-table th:nth-child(2) { width: 34%; }
+        .print-sheet .occ-print-table th:nth-child(3) { width: 12%; }
+        .print-sheet .occ-print-table th:nth-child(4) { width: 34%; }
+        .print-sheet .occ-print-table td { white-space: nowrap; }
+        .print-sheet .occ-print-table td:last-child,
+        .print-sheet .occ-print-table td:nth-child(2),
+        .print-sheet .occ-print-table.single-day td:first-child { white-space: normal; }
+        .print-sheet .occ-print-table.single-day th:nth-child(1) { width: 34%; }
+        .print-sheet .occ-print-table.single-day th:nth-child(2) { width: 30%; }
+        .print-sheet .occ-print-table.single-day th:nth-child(3) { width: 12%; }
+        .print-sheet .occ-print-table.single-day th:nth-child(4) { width: 24%; }
+        .print-sheet .print-grid.occ-summary { grid-template-columns: 1fr 1fr 1fr; }
+    </style>
+    <style>
+        :root {
+            --bg: #f3f6f4;
+            --panel: #ffffff;
+            --ink: #123127;
+            --muted: #5f746b;
+            --line: rgba(18, 49, 39, 0.09);
+            --accent: #1f6f54;
+            --accent-soft: #dceee6;
+
+            --c-sem: #d92d20;      --c-sem-soft: #fdecea;
+            --c-impar: #dc6803;    --c-impar-soft: #fef0c7;
+            --c-int: #7a5af8;      --c-int-soft: #efeafe;
+            --c-ok: #2e9b6f;       --c-ok-soft: #dff3e9;
+            --c-off: #d5ddd9;
+        }
+
+        body {
+            background:
+                radial-gradient(circle at top right, rgba(31, 111, 84, 0.10), transparent 30%),
+                linear-gradient(180deg, #f7faf8 0%, var(--bg) 100%);
+            color: var(--ink);
+            min-height: 100vh;
+            font-size: 0.95rem;
+        }
+
+        .panel {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            box-shadow: 0 8px 24px rgba(18, 49, 39, 0.04);
+        }
+
+        /* ---------- Toolbar ---------- */
+        .toolbar {
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            background: rgba(247, 250, 248, 0.92);
+            backdrop-filter: blur(8px);
+            border-bottom: 1px solid var(--line);
+        }
+
+        .preset-group .btn {
+            font-size: 0.82rem;
+            border-color: var(--line);
+            color: var(--ink);
+            background: #fff;
+        }
+
+        .preset-group .btn.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #fff;
+        }
+
+        .date-range {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            background: #fff;
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 0.15rem 0.5rem;
+        }
+
+        .date-range input {
+            border: 0;
+            background: transparent;
+            font-size: 0.85rem;
+            padding: 0.3rem 0;
+            color: var(--ink);
+            outline: none;
+        }
+
+        .muted { color: var(--muted); }
+        .tiny { font-size: 0.75rem; }
+
+        /* ---------- KPI ---------- */
+        .kpi {
+            all: unset;
+            box-sizing: border-box;
+            display: block;
+            width: 100%;
+            cursor: pointer;
+            padding: 1rem 1.1rem;
+            border-radius: 14px;
+            background: var(--panel);
+            border: 1px solid var(--line);
+            box-shadow: 0 4px 14px rgba(18, 49, 39, 0.03);
+            transition: transform 0.12s, box-shadow 0.12s, border-color 0.12s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .kpi::before {
+            content: "";
+            position: absolute;
+            inset: 0 auto 0 0;
+            width: 4px;
+            background: var(--kpi-color, var(--accent));
+            opacity: 0.85;
+        }
+
+        .kpi:hover { transform: translateY(-2px); box-shadow: 0 10px 22px rgba(18, 49, 39, 0.08); }
+        .kpi:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+        .kpi.active { border-color: var(--kpi-color, var(--accent)); box-shadow: 0 0 0 3px var(--kpi-soft, var(--accent-soft)); }
+
+        .kpi-top { display: flex; justify-content: space-between; align-items: center; }
+        .kpi-label { font-size: 0.74rem; text-transform: uppercase; font-weight: 600; letter-spacing: 0.03em; color: var(--muted); }
+        .kpi-icon {
+            width: 30px; height: 30px; border-radius: 8px;
+            display: grid; place-items: center;
+            background: var(--kpi-soft, var(--accent-soft));
+            color: var(--kpi-color, var(--accent));
+        }
+        .kpi-value { font-size: 1.9rem; font-weight: 700; line-height: 1.1; margin-top: 0.35rem; font-variant-numeric: tabular-nums; }
+        .kpi-sub { font-size: 0.75rem; color: var(--muted); }
+
+        .kpi[data-filter="sem_batidas"] { --kpi-color: var(--c-sem); --kpi-soft: var(--c-sem-soft); }
+        .kpi[data-filter="impar"] { --kpi-color: var(--c-impar); --kpi-soft: var(--c-impar-soft); }
+        .kpi[data-filter="intervalo_curto"] { --kpi-color: var(--c-int); --kpi-soft: var(--c-int-soft); }
+        .kpi[data-filter="ok"] { --kpi-color: var(--c-ok); --kpi-soft: var(--c-ok-soft); }
+        .kpi[data-filter="problemas"] { --kpi-color: #123127; --kpi-soft: #e6ece9; }
+
+        /* ---------- List ---------- */
+        .list-head {
+            display: flex; flex-wrap: wrap; gap: 0.75rem;
+            align-items: center; justify-content: space-between;
+            padding: 0.9rem 1.1rem;
+            border-bottom: 1px solid var(--line);
+        }
+
+        .search-box { position: relative; min-width: 220px; }
+        .search-box i { position: absolute; left: 0.7rem; top: 50%; transform: translateY(-50%); color: var(--muted); }
+        .search-box input { padding-left: 2rem; border-radius: 10px; font-size: 0.88rem; }
+
+        .emp-row {
+            display: grid;
+            grid-template-columns: minmax(220px, 1.3fr) minmax(170px, 1fr) minmax(160px, 1.4fr) 28px;
+            gap: 1rem;
+            align-items: center;
+            padding: 0.75rem 1.1rem;
+            border-bottom: 1px solid var(--line);
+            cursor: pointer;
+            transition: background 0.1s;
+        }
+
+        .emp-row:hover { background: #f7faf8; }
+        .emp-row.open { background: #f2f7f4; }
+        .emp-row .chev { transition: transform 0.15s; color: var(--muted); }
+        .emp-row.open .chev { transform: rotate(90deg); }
+
+        .avatar {
+            width: 38px; height: 38px; border-radius: 50%;
+            display: grid; place-items: center; flex-shrink: 0;
+            font-weight: 700; font-size: 0.82rem;
+            background: var(--accent-soft); color: var(--accent);
+        }
+
+        .avatar.unknown { background: #eef2f0; color: var(--muted); }
+        .emp-name { font-weight: 600; line-height: 1.2; }
+        .pis { font-family: Consolas, Monaco, monospace; font-size: 0.78rem; color: var(--muted); }
+
+        .counter {
+            display: inline-flex; align-items: center; gap: 0.3rem;
+            padding: 0.18rem 0.55rem; border-radius: 999px;
+            font-size: 0.75rem; font-weight: 600;
+            margin: 0.12rem 0.25rem 0.12rem 0;
+            white-space: nowrap;
+        }
+
+        .counter .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+        .counter.sem_batidas { background: var(--c-sem-soft); color: #b42318; }
+        .counter.impar { background: var(--c-impar-soft); color: #93370d; }
+        .counter.intervalo_curto { background: var(--c-int-soft); color: #5925dc; }
+        .counter.ok { background: var(--c-ok-soft); color: #1f6f54; }
+
+        .strip { display: flex; flex-wrap: wrap; gap: 3px; }
+        .strip .cell { width: 13px; height: 13px; border-radius: 3px; background: var(--c-off); }
+        .cell.sem_batidas { background: var(--c-sem); }
+        .cell.impar { background: var(--c-impar); }
+        .cell.intervalo_curto { background: var(--c-int); }
+        .cell.ok { background: var(--c-ok); }
+        .cell.dim { opacity: 0.22; }
+
+        .detail { background: #fafcfb; border-bottom: 1px solid var(--line); padding: 0.4rem 1.1rem 0.9rem 4.1rem; }
+
+        .day-row {
+            display: grid;
+            grid-template-columns: 92px minmax(200px, 1.6fr) minmax(170px, 1fr) 70px minmax(150px, 1fr);
+            gap: 0.9rem;
+            align-items: center;
+            padding: 0.55rem 0;
+            border-bottom: 1px dashed var(--line);
+            font-size: 0.86rem;
+        }
+
+        .day-row:last-child { border-bottom: 0; }
+        .day-date { font-weight: 600; font-variant-numeric: tabular-nums; }
+        .day-week { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; }
+
+        .timeline { position: relative; height: 12px; border-radius: 6px; background: #eaf0ed; }
+        .timeline .seg { position: absolute; top: 0; bottom: 0; border-radius: 6px; background: var(--c-ok); }
+        .timeline .seg.open { background: repeating-linear-gradient(45deg, var(--c-impar), var(--c-impar) 4px, #f8b74b 4px, #f8b74b 8px); }
+        .timeline .gap { position: absolute; top: 3px; bottom: 3px; background: #c9d5cf; }
+        .timeline .gap.short { background: var(--c-int); top: 1px; bottom: 1px; border-radius: 2px; }
+        .timeline .tick { position: absolute; top: -3px; bottom: -3px; width: 1px; background: rgba(18, 49, 39, 0.12); }
+        .timeline-scale { display: flex; justify-content: space-between; font-size: 0.65rem; color: var(--muted); margin-top: 2px; }
+
+        .punch {
+            display: inline-block;
+            padding: 0.08rem 0.4rem;
+            margin: 0.08rem 0.15rem 0.08rem 0;
+            border-radius: 6px;
+            background: #eef2f0;
+            font-family: Consolas, Monaco, monospace;
+            font-size: 0.8rem;
+        }
+
+        .punch.edge { background: var(--c-int-soft); color: #5925dc; font-weight: 600; }
+        .dup { font-size: 0.72rem; color: var(--muted); }
+
+        .interval { font-variant-numeric: tabular-nums; font-weight: 600; }
+        .interval.short { color: #5925dc; }
+
+        .flat-row {
+            display: grid;
+            grid-template-columns: minmax(200px, 1.2fr) 92px minmax(200px, 1.6fr) minmax(160px, 1fr) 70px minmax(150px, 1fr);
+            gap: 0.9rem;
+            align-items: center;
+            padding: 0.6rem 1.1rem;
+            border-bottom: 1px solid var(--line);
+            font-size: 0.86rem;
+        }
+
+        .flat-header {
+            font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.03em;
+            color: var(--muted); font-weight: 600;
+            background: #f4f8f6;
+            position: sticky; top: 0; z-index: 2;
+        }
+
+        .state { padding: 4rem 1rem; text-align: center; color: var(--muted); }
+        .state i { font-size: 2.2rem; display: block; margin-bottom: 0.6rem; }
+
+        .skeleton { height: 58px; margin: 0.6rem 1.1rem; border-radius: 10px;
+            background: linear-gradient(90deg, #eef2f0 25%, #f6f9f7 50%, #eef2f0 75%);
+            background-size: 200% 100%; animation: shimmer 1.2s infinite; }
+        @keyframes shimmer { to { background-position: -200% 0; } }
+
+        .legend { display: flex; flex-wrap: wrap; gap: 0.9rem; font-size: 0.75rem; color: var(--muted); }
+        .legend span { display: inline-flex; align-items: center; gap: 0.35rem; }
+        .legend .cell { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+
+        @media (max-width: 991px) {
+            .emp-row { grid-template-columns: 1fr 28px; }
+            .emp-row > .col-counters, .emp-row > .col-strip { grid-column: 1 / 2; }
+            .detail { padding-left: 1.1rem; }
+            .day-row, .flat-row { grid-template-columns: 1fr 1fr; }
+            .day-row .col-timeline, .flat-row .col-timeline { grid-column: 1 / -1; }
+            .flat-header { display: none; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="toolbar screen-only">
+    <div class="container py-3">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+            <div class="d-flex align-items-center gap-3">
+                <a href="/" class="btn btn-sm btn-outline-secondary" title="Voltar para Consulta de Batidas"><i class="bi bi-arrow-left"></i></a>
+                <div>
+                    <h1 class="h5 fw-bold mb-0">Painel de Inconsistências</h1>
+                    <div id="statusLine" class="tiny muted">—</div>
+                </div>
+            </div>
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <div class="btn-group preset-group" role="group" aria-label="Períodos rápidos">
+                    <button type="button" class="btn btn-sm" data-preset="ontem">Ontem</button>
+                    <button type="button" class="btn btn-sm" data-preset="7d">Últimos 7 dias</button>
+                    <button type="button" class="btn btn-sm" data-preset="semana">Semana passada</button>
+                    <button type="button" class="btn btn-sm" data-preset="mes">Este mês</button>
+                    <button type="button" class="btn btn-sm" data-preset="mes_ant">Mês passado</button>
+                </div>
+                <div class="date-range" title="Período personalizado (até ontem)">
+                    <i class="bi bi-calendar3 muted"></i>
+                    <input id="startDate" type="date" aria-label="Data inicial">
+                    <span class="muted">→</span>
+                    <input id="endDate" type="date" aria-label="Data final">
+                </div>
+                <button id="reloadBtn" class="btn btn-sm btn-success" title="Atualizar"><i class="bi bi-arrow-clockwise"></i></button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="container py-4 screen-only">
+    <div id="alertBox" class="alert alert-warning d-none small d-flex align-items-center gap-2" role="alert"></div>
+
+    <div class="row g-3 mb-4" id="kpiRow">
+        <div class="col-6 col-md-4 col-xl"><button class="kpi" data-filter="problemas">
+            <div class="kpi-top"><span class="kpi-label">Com ocorrência</span><span class="kpi-icon"><i class="bi bi-exclamation-octagon"></i></span></div>
+            <div class="kpi-value" data-k="problemas">–</div><div class="kpi-sub" data-s="problemas">&nbsp;</div>
+        </button></div>
+        <div class="col-6 col-md-4 col-xl"><button class="kpi" data-filter="sem_batidas">
+            <div class="kpi-top"><span class="kpi-label">Sem batidas</span><span class="kpi-icon"><i class="bi bi-person-x"></i></span></div>
+            <div class="kpi-value" data-k="sem_batidas">–</div><div class="kpi-sub" data-s="sem_batidas">&nbsp;</div>
+        </button></div>
+        <div class="col-6 col-md-4 col-xl"><button class="kpi" data-filter="impar">
+            <div class="kpi-top"><span class="kpi-label">Batidas ímpares</span><span class="kpi-icon"><i class="bi bi-hourglass-split"></i></span></div>
+            <div class="kpi-value" data-k="impar">–</div><div class="kpi-sub" data-s="impar">&nbsp;</div>
+        </button></div>
+        <div class="col-6 col-md-4 col-xl"><button class="kpi" data-filter="intervalo_curto">
+            <div class="kpi-top"><span class="kpi-label">Intervalo &lt; 1h</span><span class="kpi-icon"><i class="bi bi-cup-hot"></i></span></div>
+            <div class="kpi-value" data-k="intervalo_curto">–</div><div class="kpi-sub" data-s="intervalo_curto">&nbsp;</div>
+        </button></div>
+        <div class="col-6 col-md-4 col-xl"><button class="kpi" data-filter="ok">
+            <div class="kpi-top"><span class="kpi-label">Sem ocorrência</span><span class="kpi-icon"><i class="bi bi-check2-circle"></i></span></div>
+            <div class="kpi-value" data-k="ok">–</div><div class="kpi-sub" data-s="ok">&nbsp;</div>
+        </button></div>
+    </div>
+
+    <div class="panel overflow-hidden">
+        <div class="list-head">
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <div class="btn-group btn-group-sm" role="group" aria-label="Visão">
+                    <input type="radio" class="btn-check" name="view" id="viewEmp" value="emp" checked>
+                    <label class="btn btn-outline-success" for="viewEmp"><i class="bi bi-people"></i> Por empregado</label>
+                    <input type="radio" class="btn-check" name="view" id="viewDay" value="day">
+                    <label class="btn btn-outline-success" for="viewDay"><i class="bi bi-list-ul"></i> Por dia</label>
+                </div>
+                <div class="search-box">
+                    <i class="bi bi-search"></i>
+                    <input id="search" type="search" class="form-control form-control-sm" placeholder="Buscar nome ou PIS">
+                </div>
+            </div>
+            <div class="d-flex flex-wrap align-items-center gap-3">
+                <div class="form-check form-switch mb-0 small">
+                    <input class="form-check-input" type="checkbox" id="hideWeekends">
+                    <label class="form-check-label" for="hideWeekends">Ocultar sáb. e dom.</label>
+                </div>
+                <select id="sortBy" class="form-select form-select-sm w-auto" aria-label="Ordenar">
+                    <option value="occ">Mais ocorrências</option>
+                    <option value="name">Nome (A–Z)</option>
+                </select>
+                <button id="printBtn" class="btn btn-sm btn-outline-secondary" disabled title="Imprime o que está filtrado na tela"><i class="bi bi-printer"></i> Imprimir</button>
+                <button id="exportBtn" class="btn btn-sm btn-outline-secondary" disabled><i class="bi bi-download"></i> CSV</button>
+            </div>
+        </div>
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 px-3 py-2 border-bottom" style="border-color: var(--line) !important;">
+            <div id="resultInfo" class="tiny muted"></div>
+            <div class="legend">
+                <span><i class="cell" style="background:var(--c-sem)"></i>Sem batidas</span>
+                <span><i class="cell" style="background:var(--c-impar)"></i>Ímpar</span>
+                <span><i class="cell" style="background:var(--c-int)"></i>Intervalo curto</span>
+                <span><i class="cell" style="background:var(--c-ok)"></i>OK</span>
+            </div>
+        </div>
+        <div id="listBody"></div>
+    </div>
+
+    <p class="tiny muted mt-3 mb-0">
+        Empregados considerados: cadastrados no relógio (AFD tipo 5) e não excluídos, mais quem bateu ponto nos 30 dias anteriores a cada dia.
+        Intervalo intrajornada = 2ª → 3ª batida, avaliado com 4 ou mais batidas. Batidas repetidas no mesmo minuto contam uma vez.
+        O dia atual nunca é analisado.
+    </p>
+</div>
+
+<!-- Relatório impresso no padrão PAP: montado via JS a partir do filtro atual e paginado por print-standard.js. -->
+<section id="printReport" class="print-only print-sheet js-print-report"></section>
+<div class="print-only print-pages-output" aria-hidden="true"></div>
+
+<script>
+    const ISSUE = {
+        sem_batidas: { label: "Sem batidas", short: "Sem batidas" },
+        impar: { label: "Batidas ímpares", short: "Ímpar" },
+        intervalo_curto: { label: "Intervalo curto", short: "Intervalo" },
+    };
+    const SEVERITY = ["sem_batidas", "impar", "intervalo_curto"];
+    const WEEKDAYS = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+    const TL_START = 5 * 60, TL_END = 23 * 60;
+
+    const $ = (id) => document.getElementById(id);
+    const startDate = $("startDate"), endDate = $("endDate");
+    const listBody = $("listBody");
+
+    const state = {
+        data: null,
+        filter: "problemas",
+        view: "emp",
+        sort: "occ",
+        hideWeekends: false,
+        expanded: new Set(),
+        preset: "ontem",
+        requestId: 0,
+    };
+
+    try { state.hideWeekends = localStorage.getItem("painel.hideWeekends") === "1"; } catch (e) {}
+    $("hideWeekends").checked = state.hideWeekends;
+
+    // ---------- helpers ----------
+    const pad = (n) => String(n).padStart(2, "0");
+    const toIso = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const fromIso = (s) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+    const addDays = (d, n) => { const r = new Date(d); r.setDate(r.getDate() + n); return r; };
+    const isWeekend = (iso) => [0, 6].includes(fromIso(iso).getDay());
+    const brDate = (iso) => { const [y, m, d] = iso.split("-"); return `${d}/${m}/${y}`; };
+    const shortDate = (iso) => { const [, m, d] = iso.split("-"); return `${d}/${m}`; };
+    const minutes = (hhmm) => { const [h, m] = hhmm.split(":").map(Number); return h * 60 + m; };
+    // Empregados sem nome ficam por último.
+    const byName = (a, b) => (!a.nome - !b.nome) || (a.nome || "").localeCompare(b.nome || "", "pt-BR") || a.pis.localeCompare(b.pis);
+    const pct = (part, total) => total ? `${Math.round((part / total) * 100)}%` : "0%";
+    const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+    function fmtInterval(min) {
+        if (min === null || min === undefined) return "—";
+        const s = min < 0 ? "-" : "", a = Math.abs(min);
+        return `${s}${Math.floor(a / 60)}h${pad(a % 60)}`;
+    }
+
+    function initials(name) {
+        if (!name) return "?";
+        const parts = name.trim().split(/\s+/).filter((p) => p.length > 2 || /^[A-Z]/.test(p));
+        return ((parts[0] || "")[0] + ((parts.length > 1 ? parts[parts.length - 1] : "")[0] || "")).toUpperCase();
+    }
+
+    const yesterday = () => addDays(new Date(new Date().setHours(0, 0, 0, 0)), -1);
+
+    function presetRange(key) {
+        const y = yesterday();
+        const today = addDays(y, 1);
+        switch (key) {
+            case "7d": return [addDays(y, -6), y];
+            case "semana": {
+                const dow = (today.getDay() + 6) % 7; // 0 = segunda
+                const mondayThisWeek = addDays(today, -dow);
+                return [addDays(mondayThisWeek, -7), addDays(mondayThisWeek, -1)];
+            }
+            case "mes": {
+                const first = new Date(today.getFullYear(), today.getMonth(), 1);
+                return first > y ? [new Date(y.getFullYear(), y.getMonth(), 1), y] : [first, y];
+            }
+            case "mes_ant": {
+                const first = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+                return [first, new Date(today.getFullYear(), today.getMonth(), 0)];
+            }
+            default: return [y, y];
+        }
+    }
+
+    function periodDays() {
+        if (!state.data) return [];
+        const days = [];
+        for (let d = fromIso(state.data.start_iso); d <= fromIso(state.data.end_iso); d = addDays(d, 1)) {
+            const iso = toIso(d);
+            if (!(state.hideWeekends && isWeekend(iso))) days.push(iso);
+        }
+        return days;
+    }
+
+    function rowMatches(row) {
+        const f = state.filter;
+        if (f === "problemas") return row.ocorrencias.length > 0;
+        if (f === "ok") return row.ocorrencias.length === 0;
+        return row.ocorrencias.includes(f);
+    }
+
+    function worst(row) {
+        return SEVERITY.find((s) => row.ocorrencias.includes(s)) || "ok";
+    }
+
+    // ---------- data shaping ----------
+    function baseRows() {
+        if (!state.data) return [];
+        const term = $("search").value.trim().toLowerCase();
+        return state.data.employees.filter((r) =>
+            !(state.hideWeekends && isWeekend(r.data_iso)) &&
+            (!term || (r.nome || "").toLowerCase().includes(term) || r.pis.includes(term)));
+    }
+
+    function groupByEmployee(rows) {
+        const map = new Map();
+        for (const r of rows) {
+            if (!map.has(r.pis)) map.set(r.pis, { pis: r.pis, nome: r.nome, days: [], counts: { sem_batidas: 0, impar: 0, intervalo_curto: 0, ok: 0 } });
+            const g = map.get(r.pis);
+            g.days.push(r);
+            if (r.ocorrencias.length === 0) g.counts.ok++;
+            for (const o of r.ocorrencias) g.counts[o]++;
+        }
+        return [...map.values()];
+    }
+
+    function computeKpis() {
+        const rows = baseRows();
+        const total = rows.length;
+        const c = { problemas: 0, sem_batidas: 0, impar: 0, intervalo_curto: 0, ok: 0 };
+        const people = { problemas: new Set(), sem_batidas: new Set(), impar: new Set(), intervalo_curto: new Set(), ok: new Set() };
+        for (const r of rows) {
+            if (r.ocorrencias.length) { c.problemas++; people.problemas.add(r.pis); } else { c.ok++; people.ok.add(r.pis); }
+            for (const o of r.ocorrencias) { c[o]++; people[o].add(r.pis); }
+        }
+        const multiDay = periodDays().length > 1;
+        for (const k of Object.keys(c)) {
+            document.querySelector(`[data-k="${k}"]`).textContent = c[k];
+            document.querySelector(`[data-s="${k}"]`).textContent = multiDay
+                ? `${people[k].size} empregado${people[k].size === 1 ? "" : "s"} · ${pct(c[k], total)} dos registros`
+                : `${pct(c[k], total)} dos empregados`;
+        }
+        document.querySelectorAll(".kpi").forEach((k) => k.classList.toggle("active", k.dataset.filter === state.filter));
+    }
+
+    // ---------- renderers ----------
+    function timelineHtml(row) {
+        const t = row.batidas.map(minutes);
+        if (!t.length) return `<div class="timeline" title="Sem batidas"></div>`;
+        const span = TL_END - TL_START;
+        const pos = (m) => Math.max(0, Math.min(100, ((m - TL_START) / span) * 100));
+        let html = "";
+        for (let h = 6; h <= 22; h += 2) html += `<span class="tick" style="left:${pos(h * 60)}%"></span>`;
+        for (let i = 0; i < t.length; i += 2) {
+            if (i + 1 < t.length) {
+                html += `<span class="seg" style="left:${pos(t[i])}%;width:${Math.max(pos(t[i + 1]) - pos(t[i]), 0.6)}%" title="${row.batidas[i]} – ${row.batidas[i + 1]}"></span>`;
+                if (i + 2 < t.length) {
+                    const short = i === 0 && row.ocorrencias.includes("intervalo_curto");
+                    html += `<span class="gap${short ? " short" : ""}" style="left:${pos(t[i + 1])}%;width:${Math.max(pos(t[i + 2]) - pos(t[i + 1]), 0.4)}%" title="Intervalo ${fmtInterval(t[i + 2] - t[i + 1])}"></span>`;
+                }
+            } else {
+                html += `<span class="seg open" style="left:${pos(t[i])}%;width:1.4%" title="${row.batidas[i]} sem par"></span>`;
+            }
+        }
+        return `<div class="timeline">${html}</div>`;
+    }
+
+    function punchesHtml(row) {
+        if (!row.batidas.length) return `<span class="muted tiny">Nenhuma batida</span>`;
+        const short = row.ocorrencias.includes("intervalo_curto");
+        return row.batidas.map((b, i) => `<span class="punch${short && (i === 1 || i === 2) ? " edge" : ""}">${esc(b)}</span>`).join("")
+            + (row.batidas_duplicadas ? ` <span class="dup" title="Marcações repetidas no mesmo minuto foram desconsideradas">+${row.batidas_duplicadas} dup.</span>` : "");
+    }
+
+    function issuesHtml(row) {
+        if (!row.ocorrencias.length) return `<span class="counter ok"><span class="dot"></span>OK</span>`;
+        return row.ocorrencias.map((o) => `<span class="counter ${o}"><span class="dot"></span>${ISSUE[o].label}</span>`).join("");
+    }
+
+    function dayCells(row) {
+        const d = fromIso(row.data_iso);
+        return `<div><div class="day-date">${shortDate(row.data_iso)}</div><div class="day-week">${WEEKDAYS[d.getDay()]}</div></div>`;
+    }
+
+    function intervalHtml(row) {
+        const short = row.ocorrencias.includes("intervalo_curto");
+        return `<span class="interval${short ? " short" : ""}" title="Intervalo entre a 2ª e a 3ª batida">${fmtInterval(row.intervalo_minutos)}</span>`;
+    }
+
+    function renderEmployees(rows) {
+        const days = periodDays();
+        let groups = groupByEmployee(rows).filter((g) => {
+            if (state.filter === "ok") return g.days.every((d) => d.ocorrencias.length === 0);
+            return g.days.some(rowMatches);
+        });
+
+        const problemDays = (g) => g.counts.sem_batidas + g.counts.impar + g.counts.intervalo_curto;
+        groups.sort((a, b) => state.sort === "occ"
+            ? problemDays(b) - problemDays(a) || byName(a, b)
+            : byName(a, b));
+
+        $("resultInfo").textContent = `${groups.length} empregado${groups.length === 1 ? "" : "s"} · ${days.length} dia${days.length === 1 ? "" : "s"} no período`;
+        if (!groups.length) return emptyState();
+
+        listBody.innerHTML = groups.map((g) => {
+            const byDay = new Map(g.days.map((d) => [d.data_iso, d]));
+            const strip = days.map((iso) => {
+                const r = byDay.get(iso);
+                if (!r) return `<span class="cell" title="${brDate(iso)} · sem dados"></span>`;
+                const w = worst(r);
+                const dim = state.filter !== "todos" && !rowMatches(r);
+                return `<span class="cell ${w}${dim ? " dim" : ""}" title="${brDate(iso)} (${WEEKDAYS[fromIso(iso).getDay()]}) · ${r.ocorrencias.map((o) => ISSUE[o].label).join(", ") || "OK"}${r.batidas.length ? " · " + r.batidas.join(" ") : ""}"></span>`;
+            }).join("");
+
+            const counters = SEVERITY.filter((s) => g.counts[s]).map((s) =>
+                `<span class="counter ${s}"><span class="dot"></span>${g.counts[s]}× ${ISSUE[s].short}</span>`).join("")
+                || `<span class="counter ok"><span class="dot"></span>Tudo certo</span>`;
+
+            const open = state.expanded.has(g.pis);
+            const detailRows = g.days.filter((d) => state.filter === "ok" || rowMatches(d))
+                .sort((a, b) => a.data_iso.localeCompare(b.data_iso))
+                .map((r) => `<div class="day-row">
+                    ${dayCells(r)}
+                    <div class="col-timeline">${timelineHtml(r)}</div>
+                    <div>${punchesHtml(r)}</div>
+                    <div>${intervalHtml(r)}</div>
+                    <div>${issuesHtml(r)}</div>
+                </div>`).join("");
+
+            return `<div class="emp-row${open ? " open" : ""}" data-pis="${esc(g.pis)}" role="button" tabindex="0" aria-expanded="${open}">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="avatar${g.nome ? "" : " unknown"}">${esc(initials(g.nome))}</div>
+                        <div class="min-w-0"><div class="emp-name">${esc(g.nome) || '<span class="muted fw-normal">Sem nome cadastrado</span>'}</div><div class="pis">${esc(g.pis)}</div></div>
+                    </div>
+                    <div class="col-counters">${counters}</div>
+                    <div class="col-strip strip">${strip}</div>
+                    <i class="bi bi-chevron-right chev"></i>
+                </div>
+                ${open ? `<div class="detail"><div class="timeline-scale d-none d-lg-flex" style="margin-left:calc(92px + 0.9rem);width:calc((100% - 92px - 70px - 3.6rem) * 1.6 / 4.6)"><span>05h</span><span>14h</span><span>23h</span></div>${detailRows}</div>` : ""}`;
+        }).join("");
+    }
+
+    function renderDays(rows) {
+        const list = rows.filter(rowMatches).sort((a, b) => state.sort === "occ"
+            ? SEVERITY.indexOf(worst(a)) - SEVERITY.indexOf(worst(b)) || a.data_iso.localeCompare(b.data_iso) || byName(a, b)
+            : byName(a, b) || a.data_iso.localeCompare(b.data_iso));
+
+        $("resultInfo").textContent = `${list.length} registro${list.length === 1 ? "" : "s"} (empregado × dia)`;
+        if (!list.length) return emptyState();
+
+        listBody.innerHTML = `<div class="flat-row flat-header"><div>Empregado</div><div>Dia</div><div>Linha do tempo</div><div>Batidas</div><div>Intervalo</div><div>Ocorrências</div></div>`
+            + list.map((r) => `<div class="flat-row">
+                <div><div class="emp-name">${esc(r.nome) || '<span class="muted fw-normal">Sem nome</span>'}</div><div class="pis">${esc(r.pis)}</div></div>
+                ${dayCells(r)}
+                <div class="col-timeline">${timelineHtml(r)}</div>
+                <div>${punchesHtml(r)}</div>
+                <div>${intervalHtml(r)}</div>
+                <div>${issuesHtml(r)}</div>
+            </div>`).join("");
+    }
+
+    function emptyState() {
+        const msg = state.filter === "ok" ? "Nenhum empregado sem ocorrências neste filtro."
+            : state.filter === "problemas" ? "Nenhuma ocorrência no período. 🎉"
+            : "Nenhum registro para este filtro.";
+        listBody.innerHTML = `<div class="state"><i class="bi bi-inbox"></i>${msg}</div>`;
+    }
+
+    // ---------- print (padrão PAP, sem PIS) ----------
+    const FILTER_LABELS = {
+        problemas: "Somente com ocorrência",
+        sem_batidas: "Sem batidas",
+        impar: "Batidas ímpares",
+        intervalo_curto: "Intervalo intrajornada curto",
+        ok: "Sem ocorrência",
+    };
+
+    function printRows() {
+        return baseRows().filter(rowMatches)
+            .sort((a, b) => byName(a, b) || a.pis.localeCompare(b.pis) || a.data_iso.localeCompare(b.data_iso));
+    }
+
+    function printIssues(r) {
+        return r.ocorrencias.map((o) => ISSUE[o].label).join(", ") || "OK";
+    }
+
+    function printPunches(r) {
+        return r.batidas.length ? r.batidas.join("  ") + (r.batidas_duplicadas ? ` (+${r.batidas_duplicadas} dup.)` : "") : "Nenhuma batida";
+    }
+
+    function buildPrintReport() {
+        const report = $("printReport");
+        if (!state.data) { report.innerHTML = ""; return; }
+
+        const rows = printRows();
+        const days = periodDays();
+        const singleDay = state.data.start_iso === state.data.end_iso;
+        const period = singleDay
+            ? `${brDate(state.data.start_iso)} (${WEEKDAYS[fromIso(state.data.start_iso).getDay()]})`
+            : `${brDate(state.data.start_iso)} a ${brDate(state.data.end_iso)}`;
+        const term = $("search").value.trim();
+        const filters = [FILTER_LABELS[state.filter], state.hideWeekends ? "sem sáb./dom." : "", term ? `busca "${term}"` : ""].filter(Boolean).join(" · ");
+
+        const all = baseRows();
+        const count = (k) => all.filter((r) => k === "ok" ? !r.ocorrencias.length : r.ocorrencias.includes(k)).length;
+        const people = new Set(all.map((r) => r.pis)).size;
+        const now = new Date();
+        const emission = `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+        const logo = "{{ url_for('static', filename='img/logotipo_colorido.png') }}";
+
+        let body = `
+            <div class="print-section-title">Resumo do período</div>
+            <div class="print-grid occ-summary">
+                <div class="print-item"><span class="print-label">Período</span><span class="print-value">${esc(period)}</span></div>
+                <div class="print-item"><span class="print-label">Dias analisados</span><span class="print-value">${days.length}</span></div>
+                <div class="print-item"><span class="print-label">Empregados</span><span class="print-value">${people}</span></div>
+                <div class="print-item"><span class="print-label">Sem batidas</span><span class="print-value">${count("sem_batidas")}</span></div>
+                <div class="print-item"><span class="print-label">Batidas ímpares</span><span class="print-value">${count("impar")}</span></div>
+                <div class="print-item"><span class="print-label">Intervalo &lt; ${fmtInterval(state.data.min_intervalo_minutos)}</span><span class="print-value">${count("intervalo_curto")}</span></div>
+            </div>`;
+
+        if (!rows.length) {
+            body += `<div class="print-section-title">Ocorrências</div><p>Nenhum registro para o filtro selecionado.</p>`;
+        } else if (singleDay) {
+            body += `<div class="print-section-title">Ocorrências do dia</div>
+                <table class="print-table occ-print-table single-day">
+                    <thead><tr><th>Empregado</th><th>Batidas</th><th>Intervalo</th><th>Ocorrências</th></tr></thead>
+                    <tbody>${rows.map((r) => `<tr><td>${esc(r.nome || "Sem nome cadastrado")}</td><td>${esc(printPunches(r))}</td><td>${fmtInterval(r.intervalo_minutos)}</td><td>${esc(printIssues(r))}</td></tr>`).join("")}</tbody>
+                </table>`;
+        } else {
+            const groups = new Map();
+            for (const r of rows) {
+                if (!groups.has(r.pis)) groups.set(r.pis, []);
+                groups.get(r.pis).push(r);
+            }
+            for (const list of groups.values()) {
+                body += `<div class="print-section-title">${esc(list[0].nome || "Sem nome cadastrado")} — ${list.length} dia${list.length === 1 ? "" : "s"}</div>
+                    <table class="print-table occ-print-table">
+                        <thead><tr><th>Data</th><th>Batidas</th><th>Intervalo</th><th>Ocorrências</th></tr></thead>
+                        <tbody>${list.map((r) => `<tr><td>${brDate(r.data_iso)} (${WEEKDAYS[fromIso(r.data_iso).getDay()]})</td><td>${esc(printPunches(r))}</td><td>${fmtInterval(r.intervalo_minutos)}</td><td>${esc(printIssues(r))}</td></tr>`).join("")}</tbody>
+                    </table>`;
+            }
+        }
+
+        report.innerHTML = `
+            <div class="print-header">
+                <div style="display: flex; align-items: flex-start; gap: 10px;">
+                    <img src="${logo}" alt="Logotipo" style="height: 32px; width: auto;">
+                    <div>
+                        <h1 class="print-title">Inconsistências de Ponto</h1>
+                        <p class="print-subtitle">${esc(period)} · ${esc(filters)}</p>
+                    </div>
+                </div>
+                <div class="print-meta">
+                    <div class="print-page-counter">Pág. <span class="print-page-current">1</span> de <span class="print-page-total">1</span></div>
+                    <div><strong>Registros:</strong> ${rows.length}</div>
+                </div>
+            </div>
+            ${body}
+            <div class="print-footer">
+                <div class="print-footer-meta">
+                    <div>Documento gerado pelo Painel de Inconsistências.</div>
+                    <div>Emissão: em ${emission}</div>
+                </div>
+                <div class="print-footer-state">FIM DO RELATÓRIO</div>
+            </div>`;
+    }
+
+    function render() {
+        if (!state.data) return;
+        computeKpis();
+        const rows = baseRows();
+        if (state.view === "emp") renderEmployees(rows); else renderDays(rows);
+        const hasRows = rows.some(rowMatches);
+        $("exportBtn").disabled = !hasRows;
+        $("printBtn").disabled = !hasRows;
+        buildPrintReport();
+    }
+
+    // ---------- loading ----------
+    function setPresetButtons() {
+        document.querySelectorAll("[data-preset]").forEach((b) => b.classList.toggle("active", b.dataset.preset === state.preset));
+    }
+
+    function applyPreset(key) {
+        const [s, e] = presetRange(key);
+        state.preset = key;
+        startDate.value = toIso(s);
+        endDate.value = toIso(e);
+        setPresetButtons();
+        load();
+    }
+
+    function showAlert(message, kind = "warning") {
+        const box = $("alertBox");
+        box.className = `alert alert-${kind} small d-flex align-items-center gap-2`;
+        box.innerHTML = `<i class="bi ${kind === "danger" ? "bi-x-octagon" : "bi-info-circle"}"></i><span>${esc(message)}</span>`;
+    }
+
+    async function load() {
+        const id = ++state.requestId;
+        $("alertBox").className = "d-none";
+        $("statusLine").textContent = "Analisando…";
+        listBody.innerHTML = Array.from({ length: 6 }, () => `<div class="skeleton"></div>`).join("");
+        $("reloadBtn").disabled = true;
+
+        try {
+            const qs = new URLSearchParams({ start: startDate.value, end: endDate.value });
+            const response = await fetch(`/api/painel?${qs}`);
+            const payload = await response.json();
+            if (id !== state.requestId) return;
+            if (!response.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+
+            state.data = payload;
+            state.expanded.clear();
+            try { history.replaceState(null, "", `?start=${payload.start_iso}&end=${payload.end_iso}`); } catch (e) {}
+            startDate.max = endDate.max = payload.max_date;
+
+            const label = payload.start_iso === payload.end_iso
+                ? `${brDate(payload.start_iso)} (${WEEKDAYS[fromIso(payload.start_iso).getDay()]})`
+                : `${brDate(payload.start_iso)} a ${brDate(payload.end_iso)}`;
+            const origin = payload.sync.equipment_consulted ? "sincronizado com o relógio" : "dados locais";
+            $("statusLine").textContent = `${label} · ${payload.counts.empregados_distintos} empregados · ${origin}`;
+            if (payload.sync.warning) showAlert(payload.sync.warning);
+            render();
+        } catch (error) {
+            if (id !== state.requestId) return;
+            state.data = null;
+            $("statusLine").textContent = "Falha ao carregar";
+            showAlert(error.message, "danger");
+            listBody.innerHTML = `<div class="state"><i class="bi bi-wifi-off"></i>Não foi possível carregar o painel.</div>`;
+            $("exportBtn").disabled = true;
+        } finally {
+            if (id === state.requestId) $("reloadBtn").disabled = false;
+        }
+    }
+
+    // ---------- events ----------
+    document.querySelectorAll("[data-preset]").forEach((b) => b.addEventListener("click", () => applyPreset(b.dataset.preset)));
+
+    function onCustomDate() {
+        if (!startDate.value || !endDate.value) return;
+        if (endDate.value < startDate.value) endDate.value = startDate.value;
+        state.preset = null;
+        setPresetButtons();
+        load();
+    }
+    startDate.addEventListener("change", onCustomDate);
+    endDate.addEventListener("change", onCustomDate);
+    $("reloadBtn").addEventListener("click", load);
+
+    document.querySelectorAll(".kpi").forEach((k) => k.addEventListener("click", () => {
+        state.filter = state.filter === k.dataset.filter && k.dataset.filter !== "problemas" ? "problemas" : k.dataset.filter;
+        render();
+    }));
+
+    document.querySelectorAll('input[name="view"]').forEach((r) => r.addEventListener("change", () => { state.view = r.value; render(); }));
+    $("sortBy").addEventListener("change", (e) => { state.sort = e.target.value; render(); });
+    $("search").addEventListener("input", render);
+    $("hideWeekends").addEventListener("change", (e) => {
+        state.hideWeekends = e.target.checked;
+        try { localStorage.setItem("painel.hideWeekends", e.target.checked ? "1" : "0"); } catch (err) {}
+        render();
+    });
+
+    function toggleRow(el) {
+        const pis = el.dataset.pis;
+        if (state.expanded.has(pis)) state.expanded.delete(pis); else state.expanded.add(pis);
+        render();
+    }
+    listBody.addEventListener("click", (e) => { const row = e.target.closest(".emp-row"); if (row) toggleRow(row); });
+    listBody.addEventListener("keydown", (e) => {
+        const row = e.target.closest(".emp-row");
+        if (row && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); toggleRow(row); }
+    });
+
+    $("printBtn").addEventListener("click", () => {
+        buildPrintReport();
+        window.runStandardPrint();
+    });
+
+    $("exportBtn").addEventListener("click", () => {
+        const rows = baseRows().filter(rowMatches).sort((a, b) => byName(a, b) || a.data_iso.localeCompare(b.data_iso));
+        const header = ["Data", "Dia", "Nome", "PIS", "Qtd batidas", "Batidas", "Duplicadas ignoradas", "Intervalo 2-3", "Ocorrencias"];
+        const lines = [header, ...rows.map((r) => [
+            brDate(r.data_iso), WEEKDAYS[fromIso(r.data_iso).getDay()], r.nome, r.pis, r.total_batidas,
+            r.batidas.join(" "), r.batidas_duplicadas, fmtInterval(r.intervalo_minutos),
+            r.ocorrencias.map((o) => ISSUE[o].label).join(", ") || "OK",
+        ])].map((cols) => cols.map((v) => String(v ?? "").replace(/;/g, ",")).join(";"));
+        const blob = new Blob(["﻿", lines.join("\r\n"), "\r\n"], { type: "text/csv;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `inconsistencias_${startDate.value}_a_${endDate.value}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    });
+
+    // ---------- init ----------
+    startDate.max = endDate.max = toIso(yesterday());
+    const urlParams = new URLSearchParams(location.search);
+    if (urlParams.get("start")) {
+        startDate.value = urlParams.get("start");
+        endDate.value = urlParams.get("end") || urlParams.get("start");
+        state.preset = null;
+        setPresetButtons();
+        load();
+    } else {
+        applyPreset("ontem");
+    }
+</script>
+<script src="{{ url_for('static', filename='js/print-standard.js') }}"></script>
+</body>
+</html>

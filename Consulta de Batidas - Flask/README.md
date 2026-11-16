@@ -70,3 +70,18 @@ Observacoes:
 - Em firmwares REP mais antigos, o filtro por `NSR` ainda depende de `RepCid.dll` registrada no Windows e de suporte COM no Python.
 - O historico local e segmentado por URL do equipamento e guarda os registros por `NSR`.
 - A busca por data usa o banco como fonte principal e marca na tabela o que veio do historico e o que entrou direto na sincronizacao atual.
+
+## Painel de Inconsistencias (`/painel`)
+
+Mostra, empregado por empregado, as ocorrencias de um periodo ja encerrado (padrao: ontem). O dia atual nunca e analisado: `GET /api/painel?start=aaaa-mm-dd&end=aaaa-mm-dd` recusa hoje/futuro e periodos acima de 62 dias.
+
+- **Sem batidas**: nenhuma marcacao no dia.
+- **Batidas impares**: quantidade impar de marcacoes.
+- **Intervalo intrajornada curto**: diferenca entre a 2a e a 3a batida menor que 60 minutos (`MIN_INTRAJORNADA_MINUTES`), avaliada somente com 4 ou mais batidas.
+- Batidas repetidas no mesmo minuto contam uma vez so.
+
+Antes de analisar, o periodo e sincronizado com o relogio (dias ainda nao fechados no SQLite) e a lista de usuarios do relogio (`load_users.fcgi`) e salva na tabela `device_users` para exibir os nomes. Se o relogio estiver indisponivel, o painel usa os dados locais e exibe um aviso.
+
+A lista de empregados vem dos registros AFD tipo 5 (cadastro), desconsiderando quem tem exclusao (`E`) posterior a ultima batida, mais quem bateu ponto nos 30 dias anteriores.
+
+**Impressao**: o botao *Imprimir* gera um relatorio A4 no padrao de impressao do PAP (`static/css/print-standard.css`, `static/js/print-standard.js` e logotipo copiados de la), com o que esta filtrado na tela e apenas o nome do empregado (sem PIS).
